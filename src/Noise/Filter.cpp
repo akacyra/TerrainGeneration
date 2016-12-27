@@ -3,7 +3,7 @@
 #include <cassert>
 #include <algorithm>
 
-using namespace noise::filter;
+using namespace noise::nodes;
 
 Filter::Filter(const Node *input) : input(input)
 {

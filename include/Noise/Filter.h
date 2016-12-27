@@ -1,9 +1,9 @@
 #ifndef __FILTER_H__
 #define __FILTER_H__
 
-#include "noise/Node.h"
+#include "Noise/Node.h"
 
-namespace noise { namespace filter {
+namespace noise { namespace nodes {
 
     class Filter : public Node
     {

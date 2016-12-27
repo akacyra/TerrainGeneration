@@ -1,6 +1,7 @@
 #include "Noise/Generator.h"
+#include <cmath>
 
-using namespace noise::generator;
+using namespace noise::nodes;
 
 Constant::Constant(float value) : value(value)
 {
@@ -25,6 +26,27 @@ void Perlin::Seed(uint64_t seed)
 {
     noise.Seed(seed);
 }
+
+Ridged::Ridged(unsigned octaves, float frequency, float persistence, float lacunarity) 
+    : Perlin(octaves, frequency, persistence, lacunarity)
+{
+}
+
+float Ridged::operator()(float x, float y, float z) const
+{
+    return 1 - fabs(noise.Sample(x, y, z, octaves, frequency, persistence, lacunarity));
+}
+
+Billows::Billows(unsigned octaves, float frequency, float persistence, float lacunarity) 
+    : Perlin(octaves, frequency, persistence, lacunarity)
+{
+}
+
+float Billows::operator()(float x, float y, float z) const
+{
+    return fabs(noise.Sample(x, y, z, octaves, frequency, persistence, lacunarity));
+}
+
 
 Voronoi::Voronoi(float frequency) : frequency(frequency), noise(0)
 {

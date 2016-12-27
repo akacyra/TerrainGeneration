@@ -1,9 +1,9 @@
 #ifndef __COMBINER_H__
 #define __COMBINER_H__
 
-#include "noise/Node.h"
+#include "Noise/Node.h"
 
-namespace noise { namespace combiner {
+namespace noise { namespace nodes {
 
     class Combiner : public Node
     {

@@ -1,7 +1,7 @@
 #include "Noise/Combiner.h"
 #include <cassert>
 
-using namespace noise::combiner;
+using namespace noise::nodes;
 
 Combiner::Combiner(const Node *input1, const Node *input2) : input1(input1), input2(input2)
 {
