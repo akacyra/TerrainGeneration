@@ -1,4 +1,4 @@
-#include "Noise/VoronoiNoise.h"
+#include "VoronoiNoise.h"
 #include <cassert>
 #include <random>
 #include <algorithm>
