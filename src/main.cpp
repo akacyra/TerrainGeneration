@@ -4,7 +4,6 @@
 #include <GL/glew.h> 
 #include <SDL.h>
 
-#include "ApplicationData.h"
 #include "UI.h"
 
 int main(int, char**)
@@ -37,7 +36,11 @@ int main(int, char**)
 
     bool show_window = true;
 
-    ApplicationData data;
+    Workspace workspace;
+    NodeRenderer renderer;
+    GLuint previewTexureID;
+
+    glGenTextures(1, &previewTexureID);
 
     // Main loop
     bool done = false;
@@ -52,7 +55,7 @@ int main(int, char**)
         }
         ImGui_ImplSdlGL3_NewFrame(window);
 
-        ShowNodeGraphEditor(&show_window, data);
+        ShowNodeGraphEditor(&show_window, workspace, renderer, previewTexureID);
 
         // Rendering
         glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);
@@ -61,6 +64,8 @@ int main(int, char**)
         ImGui::Render();
         SDL_GL_SwapWindow(window);
     }
+
+    glDeleteTextures(1, &previewTexureID);
 
     // Cleanup
     ImGui_ImplSdlGL3_Shutdown();

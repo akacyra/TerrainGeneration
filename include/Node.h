@@ -1,11 +1,11 @@
+#ifndef __NODE_H__
+#define __NODE_H__
 
 #include <vector>
-#include <unordered_map>
 #include <string>
-#include <cassert>
 #include "PerlinNoise.h"
 #include "VoronoiNoise.h"
-#include <limits>
+#include <imgui.h>
 
 class Node;
 
@@ -22,129 +22,81 @@ class Node
 {
     public:
 
-        Node(unsigned inputCount, std::string name) : inputCount(inputCount), inputSlots(inputCount), name(name), id(idCounter++) { };
+        Node(unsigned inputCount, unsigned outputCount, std::string name);
+        Node(const Node &other);
 
         virtual ~Node() { };
 
-        unsigned InputCount() const { return inputCount; };
+        unsigned InputCount() const;
+        unsigned OutputCount() const;
+        const char *Name() const;
+        int ID() const;
 
-        const char *Name() const { return name.c_str(); };
-        
-        int ID() const { return id; };
-
-        bool IsInputSlotConnected(unsigned slotNum) const
-        {
-            return InputSlot(slotNum).toNode != nullptr;
-        }
-
-        bool IsOutputSlotConnected() const
-        {
-            return OutputSlot().toNode != nullptr;
-        }
-
-        void ConnectInputSlot(unsigned slotNum, Node *toNode)
-        {
-            inputSlots.at(slotNum) = Slot(toNode, 0);
-            toNode->outputSlot = Slot(this, slotNum);
-        }
-
-        void DisconnectInputSlot(unsigned slotNum)
-        {
-            Slot &slot = inputSlots.at(slotNum);
-            slot.toNode->outputSlot = Slot();
-            slot = Slot();
-        }
-
-        void ConnectOutputSlot(Node *toNode, unsigned toSlot) 
-        {
-            toNode->ConnectInputSlot(toSlot, this);
-        }
-
-        void DisconnectOutputSlot() 
-        {
-            outputSlot.toNode->DisconnectInputSlot(outputSlot.toSlot);
-        }
-
-        void DisconnectAll() 
-        {
-            for (unsigned i = 0; i < inputCount; i++) {
-                if (IsInputSlotConnected(i)) {
-                    DisconnectInputSlot(i);
-                }
-            }
-            if (IsOutputSlotConnected()) {
-                DisconnectOutputSlot();
-            }
-        }
-
-        Slot InputSlot(unsigned slotNum) const { return inputSlots.at(slotNum); }
-
-        Slot OutputSlot() const { return outputSlot; };
-
-        ImVec2 InputSlotPos(int slotNo) const 
-        { 
-            return ImVec2(pos.x, pos.y + size.y * ((float)slotNo + 1) / ((float)inputCount + 1)); 
-        }
-
-        ImVec2 OutputSlotPos() const 
-        { 
-            return ImVec2(pos.x + size.x, pos.y + size.y * 0.5f); 
-        }
+        bool IsInputSlotConnected(unsigned slotNum) const;
+        bool IsOutputSlotConnected(unsigned slotNum) const;
+        void ConnectInputSlot(unsigned thisSlot, Node *toNode, unsigned toSlot);
+        void DisconnectInputSlot(unsigned slotNum);
+        void ConnectOutputSlot(unsigned thisSlot, Node *toNode, unsigned toSlot);
+        void DisconnectOutputSlot(unsigned slotNum);
+        void DisconnectAll();
+        Slot InputSlot(unsigned slotNum) const;
+        Slot OutputSlot(unsigned slotNum) const;
+        ImVec2 InputSlotPos(unsigned slotNum) const;
+        ImVec2 OutputSlotPos(unsigned slotNum) const;
 
         virtual float Evaluate(float x, float y, float z) const = 0;
 
         virtual void DrawControls() = 0;
 
+        virtual void Reset() { };
+        virtual Node *Clone() = 0;
+
         ImVec2 pos;
         ImVec2 size;
+
+    protected:
+        void InputCount(unsigned count);
+        void OutputCount(unsigned count);
 
     private:
         unsigned inputCount;
         std::vector<Slot> inputSlots;
 
-        Slot outputSlot;
+        unsigned outputCount; 
+        std::vector<Slot> outputSlots;
 
         std::string name;
 
         static int idCounter;
-        int id = -1;
+        int id;
 };
 
-int Node::idCounter = 0;
+
 
 // Base class for generators, nodes that generate noise values
 class Generator : public Node
 {
     public:
-        Generator(std::string name) : Node(0, name) { };
+        Generator(std::string name) : Node(0, 1, name) { };
 };
 
 class Perlin : public Generator
 {
     public:
-        Perlin() : Generator("Perlin"), noise(0) { };
+        Perlin() : Generator("Perlin"), noise(0) { Reset(); };
 
-        float Evaluate(float x, float y, float z) const
-        {
-            return noise.Sample(x, y, z, octaves, frequency, persistence, lacunarity);
-        }
+        float Evaluate(float x, float y, float z) const;
 
-        uint64_t seed = 0;
-        unsigned octaves = 3;
-        float frequency = 1.0f;
-        float persistence = 0.5f;
-        float lacunarity = 2.0f;
-        
-        void DrawControls()
-        {
-            if (ImGui::SliderInt("##seed", (int *)&seed, 0, std::numeric_limits<int>::max() - 1, "Seed %.0f")) {
-                noise.Seed(seed);
-            }
-            ImGui::SliderInt("##octaves", (int *)&octaves, 1, 10, "Octaves %.0f");
-            ImGui::SliderFloat("##frequency", &frequency, 0.0f, 64.0f, "Frequency %.3f");
-            ImGui::SliderFloat("##persistence", &persistence, 0.0f, 64.0f, "Persistence %.3f");
-            ImGui::SliderFloat("##lacunarity", &lacunarity, 0.0f, 64.0f, "Lacunarity %.3f");
-        }
+        void DrawControls();
+        void Reset();
+
+        Node *Clone() { return new Perlin(*this); }
+
+        uint64_t seed;
+        unsigned octaves;
+        float frequency;
+        float persistence;
+        float lacunarity;
 
     private:
         noise::PerlinNoise noise;
@@ -153,34 +105,42 @@ class Perlin : public Generator
 class Voronoi : public Generator
 {
     public:
-        Voronoi() : Generator("Voronoi"), noise(0) { };
+        Voronoi() : Generator("Voronoi"), noise(0) { Reset(); };
 
-        float Evaluate(float x, float y, float z) const
-        {
-            return noise.Sample(x, y, z, frequency);
-        }
+        float Evaluate(float x, float y, float z) const;
 
-        uint64_t seed = 0;
-        float frequency = 1.0f;
+        void DrawControls();
+        void Reset();
 
-        void DrawControls()
-        {
-            if (ImGui::SliderInt("##seed", (int *)&seed, 0, std::numeric_limits<int>::max() - 1, "Seed %.0f")) {
-                noise.Seed(seed);
-            }
-            ImGui::SliderFloat("##frequency", &frequency, 0.0f, 64.0f, "Frequency %.3f");
-        }
+        Node *Clone() { return new Voronoi(*this); }
 
+        uint64_t seed;
+        float frequency;
 
     private:
         noise::VoronoiNoise noise;
+};
+
+class Constant : public Generator
+{
+    public:
+        Constant() : Generator("Constant") { Reset(); };
+
+        float Evaluate(float x, float y, float z) const;
+
+        void DrawControls();
+        void Reset();
+
+        Node *Clone() { return new Constant(*this); }
+    
+        float value;
 };
 
 // Base class for filters, nodes that transform one input
 class Filter : public Node
 {
     public:
-        Filter(std::string name) : Node(1, name) { };
+        Filter(std::string name) : Node(1, 1, name) { };
 };
 
 class Abs : public Filter
@@ -190,12 +150,9 @@ class Abs : public Filter
 
         void DrawControls() { };
 
-        float Evaluate(float x, float y, float z) const
-        {
-            const Node *in = InputSlot(0).toNode;
+        float Evaluate(float x, float y, float z) const;
 
-            return  in ? fabs(in->Evaluate(x, y, z)) : 0.0f;
-        }
+        Node *Clone() { return new Abs(*this); }
 };
 
 class Invert : public Filter
@@ -205,38 +162,82 @@ class Invert : public Filter
 
         void DrawControls() { };
 
-        float Evaluate(float x, float y, float z) const
-        {
-            const Node *in = InputSlot(0).toNode;
+        float Evaluate(float x, float y, float z) const;
 
-            return  in ? -in->Evaluate(x, y, z) : 0.0f;
-        }
+        Node *Clone() { return new Invert(*this); }
 };
 
 // Base class for combiners, nodes that combine two inputs together 
 class Combiner : public Node
 {
     public:
-        Combiner(std::string name) : Node(2, name) { };
+        Combiner(std::string name) : Node(2, 1, name) { };
 
-        float strength = 1.0;
-
-        void DrawControls()
-        {
-            ImGui::SliderFloat("##strength", &strength, 0.0f, 1.0f, "Strength %.3f");
-        }
 };
 
-class Add : public Combiner
+class Combine : public Combiner
 {
     public:
-        Add() : Combiner("Add") { };
+        typedef float (*CombineFunc)(float, float);
 
-        float Evaluate(float x, float y, float z) const
-        {
-            const Node *in1 = InputSlot(0).toNode;
-            const Node *in2 = InputSlot(1).toNode;
+        Combine() : Combiner("Combine") { Reset(); };
 
-            return  (in1 ? in1->Evaluate(x, y, z) : 0.0f) + (in2 ? in2->Evaluate(x, y, z) * strength : 0.0f);
-        }
+        float Evaluate(float x, float y, float z) const;
+
+        void Reset();
+        void DrawControls();
+
+        Node *Clone() { return new Combine(*this); };
+
+        float strength;
+        CombineFunc func;
+
+        static float Add(float a, float b) { return a + b; };
+        static float Multiply(float a, float b) { return a * b; };
+
+    private:
+        int currentFuncIdx;
 };
+
+// Base class for output nodes
+class Output : public Node
+{
+    public:
+        Output(std::string name) : Node(1, 0, name) { };
+};
+
+class ImageOutput : public Output
+{
+    public:
+        ImageOutput() : Output("Image Output") { Reset(); };
+
+        float Evaluate(float x, float y, float z) const;
+
+        void Reset();
+        void DrawControls();
+
+        Node *Clone() { return new ImageOutput(*this); };
+
+    private:
+        char buffer[128];
+        unsigned imageSize;
+};
+
+// Utility node that splits one input into n outputs
+class Splitter : public Node
+{
+    public:
+        Splitter() : Node(1, 2, "Splitter") { };
+
+        float Evaluate(float x, float y, float z) const;
+
+        void Reset() { };
+        void DrawControls();
+
+        Node *Clone() { return new Splitter(*this); };
+
+    private:
+        int count = 2;
+};
+
+#endif 
