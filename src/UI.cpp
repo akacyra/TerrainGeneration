@@ -16,6 +16,81 @@ bool SlotButton(ImVec2 pos)
     return result;
 }
 
+void ShowContextMenu(Workspace &workspace, ImVec2 scenePos)
+{
+    const Selection &selection = workspace.Selection();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8,8));
+    if (ImGui::BeginPopup("context_menu")) {
+        Node* node = workspace.GetSelectedNode();
+        if (node && !selection.HasSlot()) {
+            ImGui::Text("Node '%s'", node->Name());
+            ImGui::Separator();
+            if (ImGui::MenuItem("Reset", nullptr, false, true)) {
+                node->Reset();
+            }
+            if (ImGui::MenuItem("Delete", nullptr, false, true)) {
+                node->DisconnectAll();
+                workspace.DeleteNode(node->ID());
+            }
+            if (ImGui::MenuItem("Copy", nullptr, false, true)) {
+                workspace.Copy();
+            }
+        } else {
+            bool connectingToInput = selection.HasOutputSlot();
+            bool connectingToOutput = selection.HasInputSlot();
+            bool canPaste = workspace.Clipboard() != nullptr;
+
+            Node *newNode = nullptr;
+            ImGui::Text("Create Nodes");
+            ImGui::Separator();
+            if (ImGui::MenuItem("Perlin", nullptr, false, !connectingToInput)) {
+                newNode = workspace.CreateNode<Perlin>(scenePos);
+            }
+            if (ImGui::MenuItem("Voronoi", nullptr, false, !connectingToInput)) {
+                newNode = workspace.CreateNode<Voronoi>(scenePos);
+            }
+            if (ImGui::MenuItem("Constant", nullptr, false, !connectingToInput)) {
+                newNode = workspace.CreateNode<Constant>(scenePos);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Abs", nullptr, false, true)) {
+                newNode = workspace.CreateNode<Abs>(scenePos);
+            }
+            if (ImGui::MenuItem("Invert", nullptr, false, true)) {
+                newNode = workspace.CreateNode<Invert>(scenePos);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Combine", nullptr, false, true)) {
+                newNode = workspace.CreateNode<Combine>(scenePos);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Image Output", nullptr, false, true)) {
+                newNode = workspace.CreateNode<ImageOutput>(scenePos);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Paste", nullptr, false, canPaste)) {
+                workspace.Paste(scenePos);
+            }
+
+            if (newNode) {
+                if (connectingToInput) {
+                    newNode->ConnectInputSlot(0, workspace.GetSelectedNode(), selection.OutputSlot());
+                } else if (connectingToOutput) {
+                    node = workspace.GetSelectedNode();
+                    if (node->IsInputSlotConnected(selection.InputSlot())) {
+                        node->DisconnectInputSlot(selection.InputSlot());
+                    }
+                    newNode->ConnectOutputSlot(0, node, selection.InputSlot());
+                }
+                workspace.Unselect();
+            }
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
+}
+
 // Adapted from the node graph example by Ocornut: https://gist.github.com/ocornut/7e9b3ec566a333d725d4
 void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &renderer, GLuint previewTextureID)
 {
@@ -87,8 +162,10 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
         bool old_any_active = ImGui::IsAnyItemActive();
         ImGui::SetCursorScreenPos(nodeRectMin + NODE_WINDOW_PADDING);
         ImGui::BeginGroup(); // Lock horizontal position
-        //ImGui::Text("%s: %d: %p%", node->Name(), node->ID(), node);
         ImGui::Text("%s", node->Name());
+#ifdef DEBUG
+        ImGui::Text("ID %d : %d : %p%", node->ID(), node->OutputCount(), node);
+#endif
         node->DrawControls();
         ImGui::EndGroup();
 
@@ -135,11 +212,6 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
                             node->DisconnectInputSlot(slotIdx);
                         }
 
-                        if (toNode->IsOutputSlotConnected(selection.OutputSlot())) {
-                            Slot out = toNode->OutputSlot(selection.OutputSlot());
-                            out.toNode->DisconnectInputSlot(out.toSlot);
-                        }
-
                         node->ConnectInputSlot(slotIdx, toNode, selection.OutputSlot());
                         
                         workspace.Unselect();
@@ -148,30 +220,34 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
             }
 
             if (ImGui::IsItemHovered()) {
-                //ImGui::SetTooltip("Points to: %p", node->InputSlot(slotIdx).toNode);
+#ifdef DEBUG
+                    ImGui::SetTooltip("Points to: %p", node->InputSlot(slotIdx).toNode);
+#endif
+                if (ImGui::IsMouseClicked(1) && node->IsInputSlotConnected(slotIdx)) {
+                    node->DisconnectInputSlot(slotIdx);
+                }
             }
 
 
             ImGui::PopID();
         }
 
-        for (int slotIdx = 0; slotIdx < node->OutputCount(); slotIdx++) {
-            ImGui::PushID(node->InputCount() + slotIdx);
-
-            ImVec2 pos = offset + node->OutputSlotPos(slotIdx) + ImVec2(NODE_SLOT_RADIUS / 2, 0);
-            ImColor color = node->IsOutputSlotConnected(slotIdx) ? ImColor(150,150,150,150) : ImColor(150, 100, 100);
+        if (node->OutputCount() > 0) {
+            ImVec2 pos = offset + node->OutputSlotPos(0) + ImVec2(NODE_SLOT_RADIUS / 2, 0);
+            ImColor color = node->OutputCount() > 1 ? ImColor(150,150,150,150) : ImColor(150, 100, 100);
             drawList->AddCircleFilled(pos, NODE_SLOT_RADIUS, color);
 
             if (SlotButton(pos)) {
+                unsigned emptySlot = node->OutputCount() - 1;
                 if (!selection.HasSlot()) {
-                    workspace.SelectOutputSlot(node->ID(), slotIdx);
+                    workspace.SelectOutputSlot(node->ID(), emptySlot);
                 } else if (selection.HasInputSlot()) {
                     Node *fromNode = workspace.GetSelectedNode();
                     if (fromNode != node) {
                         if (fromNode->IsInputSlotConnected(selection.InputSlot())) {
                             fromNode->DisconnectInputSlot(selection.InputSlot());
                         }
-                        fromNode->ConnectInputSlot(selection.InputSlot(), node, slotIdx);
+                        fromNode->ConnectInputSlot(selection.InputSlot(), node, emptySlot);
                         
                         workspace.Unselect();
                     }
@@ -179,10 +255,15 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
             }
 
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Points to: %p", node->OutputSlot(slotIdx).toNode);
+#ifdef DEBUG
+                ImGui::BeginTooltip();
+                ImGui::Text("Point to:");
+                for (unsigned i = 0; i < node->OutputCount(); i++) {
+                    ImGui::Text("%p", node->OutputSlot(i).toNode);
+                }
+                ImGui::EndTooltip();
+#endif
             }
-
-            ImGui::PopID();
         }
 
         ImGui::PopID();
@@ -207,76 +288,7 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
     }
 
     // Draw context menu
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8,8));
-    if (ImGui::BeginPopup("context_menu")) {
-        Node* node = workspace.GetSelectedNode();
-        ImVec2 scenePos = ImGui::GetMousePosOnOpeningCurrentPopup() - offset;
-        if (node && !selection.HasSlot()) {
-            ImGui::Text("Node '%s'", node->Name());
-            ImGui::Separator();
-            if (ImGui::MenuItem("Reset", nullptr, false, true)) {
-                node->Reset();
-            }
-            if (ImGui::MenuItem("Delete", nullptr, false, true)) {
-                node->DisconnectAll();
-                workspace.DeleteNode(node->ID());
-            }
-            if (ImGui::MenuItem("Copy", nullptr, false, true)) {
-                workspace.Copy();
-            }
-        } else {
-            bool connectingToInput = selection.HasSlot() && selection.HasOutputSlot();
-            bool connectingToOutput = selection.HasSlot() && selection.HasInputSlot();
-            bool canPaste = workspace.Clipboard() != nullptr;
-
-            Node *newNode = nullptr;
-            ImGui::Text("Create Nodes");
-            ImGui::Separator();
-            if (ImGui::MenuItem("Perlin", nullptr, false, !connectingToInput)) {
-                newNode = workspace.CreateNode<Perlin>(scenePos);
-            }
-            if (ImGui::MenuItem("Voronoi", nullptr, false, !connectingToInput)) {
-                newNode = workspace.CreateNode<Voronoi>(scenePos);
-            }
-            if (ImGui::MenuItem("Constant", nullptr, false, !connectingToInput)) {
-                newNode = workspace.CreateNode<Constant>(scenePos);
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Abs", nullptr, false, true)) {
-                newNode = workspace.CreateNode<Abs>(scenePos);
-            }
-            if (ImGui::MenuItem("Invert", nullptr, false, true)) {
-                newNode = workspace.CreateNode<Invert>(scenePos);
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Combine", nullptr, false, true)) {
-                newNode = workspace.CreateNode<Combine>(scenePos);
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Image Output", nullptr, false, true)) {
-                newNode = workspace.CreateNode<ImageOutput>(scenePos);
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Splitter", nullptr, false, true)) {
-                newNode = workspace.CreateNode<Splitter>(scenePos);
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Paste", nullptr, false, canPaste)) {
-                workspace.Paste(scenePos);
-            }
-
-            if (newNode) {
-                if (connectingToInput) {
-                    newNode->ConnectInputSlot(0, workspace.GetNode(selection.Node()), selection.OutputSlot());
-                } else if (connectingToOutput) {
-                    newNode->ConnectOutputSlot(0, workspace.GetNode(selection.Node()), selection.InputSlot());
-                }
-                workspace.Unselect();
-            }
-        }
-        ImGui::EndPopup();
-    }
-    ImGui::PopStyleVar();
+    ShowContextMenu(workspace, ImGui::GetMousePosOnOpeningCurrentPopup() - offset);
 
     ImGui::PopItemWidth();
     ImGui::EndChild();

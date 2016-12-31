@@ -8,6 +8,9 @@ TARGET := terrain
 
 all: entry 
 
+debug: CC_FLAGS += -DDEBUG
+debug: entry
+
 entry: directories $(TARGET)
 
 $(TARGET): $(OBJ_FILES)

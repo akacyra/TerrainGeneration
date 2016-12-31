@@ -223,21 +223,5 @@ class ImageOutput : public Output
         unsigned imageSize;
 };
 
-// Utility node that splits one input into n outputs
-class Splitter : public Node
-{
-    public:
-        Splitter() : Node(1, 2, "Splitter") { };
-
-        float Evaluate(float x, float y, float z) const;
-
-        void Reset() { };
-        void DrawControls();
-
-        Node *Clone() { return new Splitter(*this); };
-
-    private:
-        int count = 2;
-};
 
 #endif 

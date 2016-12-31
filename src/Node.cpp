@@ -57,12 +57,21 @@ void Node::ConnectInputSlot(unsigned thisSlot, Node *toNode, unsigned toSlot)
 {
     inputSlots.at(thisSlot) = Slot(toNode, toSlot);
     toNode->outputSlots.at(toSlot) = Slot(this, thisSlot);
+
+    if (toSlot == toNode->OutputCount() - 1) {
+        toNode->OutputCount(toNode->OutputCount() + 1);
+    }
 }
 
 void Node::DisconnectInputSlot(unsigned slotNum)
 {
     Slot &slot = inputSlots.at(slotNum);
-    slot.toNode->outputSlots.at(slot.toSlot) = Slot();
+    Node *output = slot.toNode;
+
+    output->outputSlots[slot.toSlot] = output->outputSlots[output->outputCount - 2];
+    output->outputSlots[output->outputCount - 2] = Slot();
+    output->outputCount--;
+
     slot = Slot();
 }
 
@@ -129,7 +138,7 @@ ImVec2 Node::InputSlotPos(unsigned slotNum) const
 
 ImVec2 Node::OutputSlotPos(unsigned slotNum) const 
 { 
-    return ImVec2(pos.x + size.x, pos.y + size.y * ((float)slotNum + 1) / ((float)outputCount + 1)); 
+    return ImVec2(pos.x + size.x, pos.y + size.y * 0.5f);
 }
 
 float Perlin::Evaluate(float x, float y, float z) const
@@ -220,7 +229,7 @@ const char *combineComboItems[] = {
 
 void Combine::DrawControls()
 {
-    ImGui::SliderFloat("##strength", &strength, 0.0f, 1.0f, "Strength %.3f");
+    ImGui::SliderFloat("##strength", &strength, 0.0f, 2.0f, "Strength %.3f");
 
     if (ImGui::Combo("##function", &currentFuncIdx, combineComboItems, 2)) {
         switch (currentFuncIdx) {
@@ -259,19 +268,4 @@ void ImageOutput::DrawControls()
         const NodeRenderer::ImageData image = renderer.Render(this);
         lodepng::encode(std::string(buffer) + ".png", image, imageSize, imageSize, LCT_RGB, 8);
     }
-}
-
-float Splitter::Evaluate(float x, float y, float z) const
-{
-    const Node *in = InputSlot(0).toNode;
-
-    return in ? in->Evaluate(x, y, z) : 0.0f;
-}
-
-void Splitter::DrawControls()
-{
-    if (ImGui::SliderInt("##", &count, 2, 10, "%.0f")) {
-        OutputCount(count);
-    }
-    ImGui::Dummy(ImVec2(0.0f, 16.0f * (OutputCount() - 2)));
 }
