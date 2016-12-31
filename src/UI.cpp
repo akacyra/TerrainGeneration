@@ -1,7 +1,9 @@
 #include "UI.h"
 
-inline ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs) { return ImVec2(lhs.x+rhs.x, lhs.y+rhs.y); }
-inline ImVec2 operator-(const ImVec2& lhs, const ImVec2& rhs) { return ImVec2(lhs.x-rhs.x, lhs.y-rhs.y); }
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui_internal.h"
+
+
 
 const float NODE_SLOT_RADIUS = 4.0f;
 const ImVec2 NODE_WINDOW_PADDING(8.0f, 8.0f);
@@ -36,6 +38,15 @@ void ShowContextMenu(Workspace &workspace, ImVec2 scenePos)
             if (ImGui::MenuItem("Copy", nullptr, false, true)) {
                 workspace.Copy();
             }
+            if (node == workspace.PreviewNode()) {
+                if (ImGui::MenuItem("Unlock Preview", nullptr, false, true)) {
+                    workspace.UnlockPreviewNode();
+                }
+            } else {
+                if (ImGui::MenuItem("Lock Preview", nullptr, false, true)) {
+                    workspace.LockPreviewNode(node->ID());
+                }
+            }
         } else {
             bool connectingToInput = selection.HasOutputSlot();
             bool connectingToOutput = selection.HasInputSlot();
@@ -47,9 +58,6 @@ void ShowContextMenu(Workspace &workspace, ImVec2 scenePos)
             if (ImGui::MenuItem("Perlin", nullptr, false, !connectingToInput)) {
                 newNode = workspace.CreateNode<Perlin>(scenePos);
             }
-            if (ImGui::MenuItem("Voronoi", nullptr, false, !connectingToInput)) {
-                newNode = workspace.CreateNode<Voronoi>(scenePos);
-            }
             if (ImGui::MenuItem("Constant", nullptr, false, !connectingToInput)) {
                 newNode = workspace.CreateNode<Constant>(scenePos);
             }
@@ -59,6 +67,9 @@ void ShowContextMenu(Workspace &workspace, ImVec2 scenePos)
             }
             if (ImGui::MenuItem("Invert", nullptr, false, true)) {
                 newNode = workspace.CreateNode<Invert>(scenePos);
+            }
+            if (ImGui::MenuItem("Selector", nullptr, false, true)) {
+                newNode = workspace.CreateNode<Selector>(scenePos);
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Combine", nullptr, false, true)) {
@@ -166,7 +177,7 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
 #ifdef DEBUG
         ImGui::Text("ID %d : %d : %p%", node->ID(), node->OutputCount(), node);
 #endif
-        node->DrawControls();
+        node->DrawControls(drawList);
         ImGui::EndGroup();
 
         // Save the size of what we have emitted and whether any of the widgets are being used
@@ -193,13 +204,17 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
 
         ImU32 nodeBGColor  = nodeHoveredInScene == node->ID() ? ImColor(75,75,75) : ImColor(60,60,60);
         drawList->AddRectFilled(nodeRectMin, nodeRectMax, nodeBGColor , 4.0f); 
-        drawList->AddRect(nodeRectMin, nodeRectMax, ImColor(100,100,100), 4.0f); 
+        drawList->AddRect(nodeRectMin, nodeRectMax, ImColor(100,100,100), 4.0f);
+
+        if (node == workspace.PreviewNode()) {
+            drawList->AddCircleFilled(nodeRectMin + ImVec2(node->size.x - 8.0f, 8.0f), 4.0f, ImColor(100, 150, 100));
+        } 
 
         for (int slotIdx = 0; slotIdx < node->InputCount(); slotIdx++) {
             ImGui::PushID(slotIdx);
 
             ImVec2 pos = offset + node->InputSlotPos(slotIdx) - ImVec2(NODE_SLOT_RADIUS / 2, 0);
-            ImColor color = node->IsInputSlotConnected(slotIdx) ? ImColor(150,150,150,150) : ImColor(150, 100, 100);
+            ImColor color = node->IsInputSlotConnected(slotIdx) ? ImColor(150,150,150) : ImColor(150, 100, 100);
             drawList->AddCircleFilled(pos, NODE_SLOT_RADIUS, color);
 
             if (SlotButton(pos)) {
@@ -234,7 +249,7 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
 
         if (node->OutputCount() > 0) {
             ImVec2 pos = offset + node->OutputSlotPos(0) + ImVec2(NODE_SLOT_RADIUS / 2, 0);
-            ImColor color = node->OutputCount() > 1 ? ImColor(150,150,150,150) : ImColor(150, 100, 100);
+            ImColor color = node->OutputCount() > 1 ? ImColor(150,150,150) : ImColor(150, 100, 100);
             drawList->AddCircleFilled(pos, NODE_SLOT_RADIUS, color);
 
             if (SlotButton(pos)) {
@@ -304,10 +319,16 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
 
     unsigned size = renderer.ImageSize();
 
-    ImGui::Image((ImTextureID)previewTextureID, ImVec2(size, size), ImVec2(0, 0), ImVec2(0.25, 0.25));
+    ImGui::Image((ImTextureID)previewTextureID, ImVec2(size, size), ImVec2(0, 0), ImVec2(1, 1));
 
-    if (selection.HasNode()) {
-        Node *node = workspace.GetSelectedNode();
+    if (workspace.GetSelectedNode()) {
+        const Node *node;
+
+        if (workspace.HasPreviewNode()) {
+            node = workspace.PreviewNode();
+        } else {
+            node = workspace.GetSelectedNode();
+        }
 
         const NodeRenderer::ImageData &image = renderer.Render(node);
 
@@ -315,7 +336,7 @@ void ShowNodeGraphEditor(bool *opened, Workspace &workspace, NodeRenderer &rende
         glBindTexture(GL_TEXTURE_2D, previewTextureID);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, size, size, 0, GL_RGB, GL_UNSIGNED_INT, image.data());
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, size, size, 0, GL_RGB, GL_UNSIGNED_BYTE, image.data());
     }
 
     ImGui::End();

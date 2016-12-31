@@ -3,12 +3,12 @@ SOURCE_FILES := $(wildcard src/*.cpp) $(wildcard src/*/*.cpp)
 SRC_OBJ := $(SOURCE_FILES:%.cpp=%.o)
 OBJ_FILES := $(SRC_OBJ:src/%=obj/%)
 LD_FLAGS := -lm `sdl2-config --libs` -framework OpenGl -lglew
-CC_FLAGS := -Wall -MMD -std=c++11 -Iinclude -Iinclude/Imgui -g `sdl2-config --cflags`
+CC_FLAGS := -Wall -MMD -std=c++11 -Iinclude -Iinclude/Imgui `sdl2-config --cflags`
 TARGET := terrain
 
 all: entry 
 
-debug: CC_FLAGS += -DDEBUG
+debug: CC_FLAGS += -DDEBUG -g
 debug: entry
 
 entry: directories $(TARGET)

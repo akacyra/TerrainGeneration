@@ -4,8 +4,8 @@
 #include <vector>
 #include <string>
 #include "PerlinNoise.h"
-#include "VoronoiNoise.h"
 #include <imgui.h>
+#include <cmath>
 
 class Node;
 
@@ -46,7 +46,7 @@ class Node
 
         virtual float Evaluate(float x, float y, float z) const = 0;
 
-        virtual void DrawControls() = 0;
+        virtual void DrawControls(ImDrawList *drawList) = 0;
 
         virtual void Reset() { };
         virtual Node *Clone() = 0;
@@ -60,9 +60,8 @@ class Node
 
     private:
         unsigned inputCount;
-        std::vector<Slot> inputSlots;
-
         unsigned outputCount; 
+        std::vector<Slot> inputSlots;
         std::vector<Slot> outputSlots;
 
         std::string name;
@@ -83,11 +82,13 @@ class Generator : public Node
 class Perlin : public Generator
 {
     public:
+        typedef float (*StyleFunc)(float);
+
         Perlin() : Generator("Perlin"), noise(0) { Reset(); };
 
         float Evaluate(float x, float y, float z) const;
 
-        void DrawControls();
+        void DrawControls(ImDrawList *drawList);
         void Reset();
 
         Node *Clone() { return new Perlin(*this); }
@@ -98,27 +99,16 @@ class Perlin : public Generator
         float persistence;
         float lacunarity;
 
+        StyleFunc style;
+
+        static float Classic(float v) { return v; };
+        static float Billowy(float v) { return fabs(v - 0.5f) + 0.5f; };
+        static float Ridged(float v) { return 0.5f - fabs(v - 0.5f); };
+
     private:
         noise::PerlinNoise noise;
-};
 
-class Voronoi : public Generator
-{
-    public:
-        Voronoi() : Generator("Voronoi"), noise(0) { Reset(); };
-
-        float Evaluate(float x, float y, float z) const;
-
-        void DrawControls();
-        void Reset();
-
-        Node *Clone() { return new Voronoi(*this); }
-
-        uint64_t seed;
-        float frequency;
-
-    private:
-        noise::VoronoiNoise noise;
+        int currentStyleIdx;
 };
 
 class Constant : public Generator
@@ -128,12 +118,28 @@ class Constant : public Generator
 
         float Evaluate(float x, float y, float z) const;
 
-        void DrawControls();
+        void DrawControls(ImDrawList *drawList);
         void Reset();
 
         Node *Clone() { return new Constant(*this); }
     
         float value;
+};
+
+class Gradient : public Generator
+{
+    public:
+        Gradient() : Generator("Gradient") { Reset(); };
+
+        float Evaluate(float x, float y, float z) const;
+
+        void DrawControls(ImDrawList *drawList);
+        void Reset();
+
+        Node *Clone() { return new Gradient(*this); }
+
+        ImVec2 start;
+        ImVec2 end;
 };
 
 // Base class for filters, nodes that transform one input
@@ -148,7 +154,7 @@ class Abs : public Filter
     public:
         Abs() : Filter("Abs") { };
 
-        void DrawControls() { };
+        void DrawControls(ImDrawList *drawList) { };
 
         float Evaluate(float x, float y, float z) const;
 
@@ -160,11 +166,27 @@ class Invert : public Filter
     public:
         Invert() : Filter("Invert") { };
 
-        void DrawControls() { };
+        void DrawControls(ImDrawList *drawList) { };
 
         float Evaluate(float x, float y, float z) const;
 
         Node *Clone() { return new Invert(*this); }
+};
+
+class Selector : public Filter
+{
+    public:
+        Selector() : Filter("Selector") { Reset(); };
+
+        void Reset();
+        void DrawControls(ImDrawList *drawList);
+
+        float Evaluate(float x, float y, float z) const;
+
+        Node *Clone() { return new Selector(*this); }
+
+        float min, max;
+        float falloff;
 };
 
 // Base class for combiners, nodes that combine two inputs together 
@@ -185,7 +207,7 @@ class Combine : public Combiner
         float Evaluate(float x, float y, float z) const;
 
         void Reset();
-        void DrawControls();
+        void DrawControls(ImDrawList *drawList);
 
         Node *Clone() { return new Combine(*this); };
 
@@ -214,7 +236,7 @@ class ImageOutput : public Output
         float Evaluate(float x, float y, float z) const;
 
         void Reset();
-        void DrawControls();
+        void DrawControls(ImDrawList *drawList);
 
         Node *Clone() { return new ImageOutput(*this); };
 

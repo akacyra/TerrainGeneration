@@ -15,6 +15,10 @@ void Workspace::DeleteNode(int id)
         if (id == selection.Node()) {
             Unselect();
         }
+        
+        if (id == previewNode) {
+            UnlockPreviewNode();
+        }
     }
 }
 
@@ -65,6 +69,7 @@ const Workspace::NodeMap &Workspace::Nodes() const
 void Workspace::Reset()
 {
     Unselect();
+    UnlockPreviewNode();
     clipboard = nullptr;
     nodes.clear();
 }
@@ -89,4 +94,24 @@ void Workspace::Paste(ImVec2 pos)
 const Node *Workspace::Clipboard() const
 {
     return clipboard;
+}
+
+void Workspace::LockPreviewNode(int id)
+{
+    previewNode = id;
+}
+
+void Workspace::UnlockPreviewNode()
+{
+    previewNode = -1;
+}
+
+bool Workspace::HasPreviewNode()
+{
+    return previewNode != -1;
+}
+
+const Node *Workspace::PreviewNode() const
+{
+    return GetNode(previewNode);
 }

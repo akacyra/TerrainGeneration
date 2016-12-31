@@ -67,10 +67,16 @@ class Workspace
         void Paste(ImVec2 pos = ImVec2(0, 0));
         const Node *Clipboard() const;
 
+        void LockPreviewNode(int id);
+        void UnlockPreviewNode();
+        bool HasPreviewNode();
+        const Node *PreviewNode() const;
+
     private:
         NodeMap nodes;
         class Selection selection;
         Node *clipboard;
+        int previewNode;
 };
 
 #endif
